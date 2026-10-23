@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SpareAI — Chat</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, sans-serif;
+           margin: 0; display: grid; grid-template-columns: 1fr 320px; height: 100vh; }
+    main { padding: 1rem 1.25rem; display: flex; flex-direction: column; min-width: 0; }
+    aside { border-left: 1px solid #8884; padding: 1rem; overflow-y: auto; font-size: 13px; }
+    h1 { font-size: 1.1rem; margin: 0 0 .5rem 0; }
+    #out { flex: 1; white-space: pre-wrap; border: 1px solid #8884; padding: .75rem;
+           border-radius: 6px; overflow-y: auto; font-family: ui-monospace, Menlo, Consolas, monospace; }
+    #meta { font-size: 12px; color: #888; margin-top: .5rem; min-height: 1.3em; }
+    #banner { color: #c33; font-size: 12px; min-height: 1.2em; }
+    form { display: flex; gap: .5rem; margin-top: .75rem; }
+    textarea { flex: 1; min-height: 60px; resize: vertical; font: inherit;
+               padding: .5rem; border-radius: 6px; border: 1px solid #8884; }
+    button { padding: 0 1rem; border-radius: 6px; border: 1px solid #8884;
+             background: #4a7; color: white; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .agent { border: 1px solid #8884; border-radius: 6px; padding: .5rem; margin-bottom: .5rem; }
+    .agent h3 { margin: 0 0 .25rem 0; font-size: 13px; }
+    .pill { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 11px; }
+    .pill.READY { background: #4a73; color: #4a7; }
+    .pill.OVERLOAD { background: #c333; color: #c33; }
+    .pill.HOT { background: #e703; color: #c70; }
+    .pill.COLD { background: #4af3; color: #4af; }
+    .pill.UNKNOWN { background: #8883; color: #888; }
+    .pill.off { background: #c333; color: #c33; }
+    .kv { font-size: 11px; color: #888; }
+  </style>
+</head>
+<body>
+  <main>
+    <div style="background:#fe3; color:#333; padding:4px 10px; font-size:12px; border-radius:4px; margin-bottom:.5rem;">
+      SpareAI PoC demo — not production. Latency and quality numbers are from a small-sample CPU run.
+    </div>
+    <h1>SpareAI — chat demo</h1>
+    <div id="out"></div>
+    <div id="meta"></div>
+    <div id="banner"></div>
+    <form id="f">
+      <textarea id="prompt" placeholder="Ask something…" required></textarea>
+      <button id="send" type="submit">Send</button>
+      <button id="newconv" type="button" title="Clear local chat state">New</button>
+    </form>
+  </main>
+  <aside>
+    <h1>Agents</h1>
+    <div id="agents">loading…</div>
+  </aside>
+
+  <script>
+    const CLIENT_TOKEN = "{{ client_token }}";
+    const MODEL = "{{ default_model }}";
+
+    const $out = document.getElementById("out");
+    const $meta = document.getElementById("meta");
+    const $banner = document.getElementById("banner");
+    const $form = document.getElementById("f");
+    const $prompt = document.getElementById("prompt");
+    const $send = document.getElementById("send");
+    const $agents = document.getElementById("agents");
+
+    async function refreshAgents() {
+      try {
+        const r = await fetch("/agents", { headers: { Authorization: "Bearer " + CLIENT_TOKEN } });
+        if (!r.ok) throw new Error("http " + r.status);
+        const data = await r.json();
+        $agents.innerHTML = data.agents.map(a => {
+          const states = Object.entries(a.models || {})
+            .map(([n, m]) => `<span class="pill ${m.state}">${m.state}</span>`).join(" ");
+          const reach = a.reachable ? `<span class="pill ${a.state}">${a.state}</span>`
+                                    : `<span class="pill off">UNREACHABLE</span>`;
+          return `<div class="agent">
+            <h3>${a.node_id} ${reach}</h3>
+            <div class="kv">in_flight=${a.in_flight_requests ?? "–"} ·
+                 load/core=${a.load_per_core ?? "–"}</div>
+            <div>${states}</div>
+          </div>`;
+        }).join("") || "<em>no agents</em>";
+      } catch (e) {
+        $agents.innerHTML = "<em>err: " + e.message + "</em>";
+      }
+    }
+    setInterval(refreshAgents, 2000); refreshAgents();
+
+    async function send(prompt) {
+      $out.textContent = "";
+      $meta.textContent = "";
+      $banner.textContent = "";
+      $send.disabled = true;
+      const t0 = performance.now();
+      try {
+        const resp = await fetch("/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + CLIENT_TOKEN,
+            "Accept": "text/event-stream",
+          },
+          body: JSON.stringify({ model: MODEL, prompt }),
+        });
+        if (!resp.ok) {
+          const t = await resp.text();
+          $banner.textContent = "error " + resp.status + ": " + t;
+          return;
+        }
+        const reader = resp.body.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let idx;
+          while ((idx = buf.indexOf("\n\n")) !== -1) {
+            const raw = buf.slice(0, idx); buf = buf.slice(idx + 2);
+            handleEvent(raw);
+          }
+        }
+      } catch (e) {
+        $banner.textContent = "network error: " + e.message;
+      } finally {
+        $send.disabled = false;
+      }
+    }
+
+    function handleEvent(raw) {
+      let event = "message", data = "";
+      for (const line of raw.split("\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        else if (line.startsWith("data:")) data += line.slice(5).trim();
+      }
+      if (!data) return;
+      let payload = {};
+      try { payload = JSON.parse(data); } catch { return; }
+      if (event === "routing") {
+        $meta.textContent = `→ ${payload.node_id} (${payload.model_state_at_routing}, attempt ${payload.attempt})`;
+      } else if (event === "token") {
+        $out.textContent += payload.chunk;
+        $out.scrollTop = $out.scrollHeight;
+      } else if (event === "done") {
+        const toks = payload.eval_count, dur = payload.eval_duration;
+        if (toks && dur) {
+          const tps = (toks / (dur / 1e9)).toFixed(1);
+          $meta.textContent += ` · ${toks} tok, ${tps} tok/s, ttft=${payload.agent_ttft_ms}ms`;
+        }
+      } else if (event === "metrics") {
+        $meta.textContent += ` · e2e=${payload.e2e_latency_ms}ms`;
+        if ((payload.failover_attempts || []).length) {
+          $meta.textContent += ` · failed_over_from=${payload.failover_attempts.join(",")}`;
+        }
+      } else if (event === "error") {
+        $banner.textContent = `[${payload.where}] ${payload.code}: ${payload.detail || ""}`;
+      }
+    }
+
+    document.getElementById("newconv").addEventListener("click", () => {
+      $out.textContent = ""; $meta.textContent = ""; $banner.textContent = "";
+      $prompt.value = ""; $prompt.focus();
+    });
+
+    $form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const p = $prompt.value.trim();
+      if (p) send(p);
+    });
+  </script>
+</body>
+</html>

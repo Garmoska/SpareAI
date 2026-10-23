@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest -q)",
+      "Bash(python -m pip install -e \".[dev]\")",
+      "Bash(where python *)",
+      "Bash(py -3.11 --version)",
+      "Bash(py --list)",
+      "Bash(py -3.13 -m pip install -e \"c:/Leonov/SpareAI[dev]\" --user)",
+      "Bash(py -3.13 -m pytest -q)"
+    ]
+  }
+}

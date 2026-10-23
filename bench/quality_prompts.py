@@ -1,0 +1,38 @@
+"""The fixed 10-prompt quality set from prompts/clarifications.md entry #8."""
+
+QUALITY_PROMPTS: list[dict] = [
+    {"id": "q01", "category": "summarization",
+     "prompt": "Summarize this paragraph in 2 sentences: At 03:14 UTC the primary order-service "
+               "database began returning intermittent timeouts; the on-call engineer initially "
+               "suspected a network partition after seeing elevated TCP retransmit counts on the "
+               "application tier. Further investigation revealed that an automated vacuum job on a "
+               "large audit table had acquired a long-running ACCESS EXCLUSIVE lock, blocking all "
+               "foreground queries. The vacuum was cancelled at 03:41 and traffic recovered within "
+               "two minutes; a follow-up ticket was filed to schedule vacuums off-hours."},
+    {"id": "q02", "category": "code_python",
+     "prompt": "In Python, what's the difference between `is` and `==`? Give a one-sentence answer "
+               "and a 2-line example."},
+    {"id": "q03", "category": "code_sql",
+     "prompt": "Write a SQL query to find the top 5 customers by total order value from "
+               "`orders(customer_id, amount)` and `customers(id, name)`."},
+    {"id": "q04", "category": "translation",
+     "prompt": "Translate to Russian: 'Please review the attached report by end of day Friday "
+               "and reply with any blocking concerns.'"},
+    {"id": "q05", "category": "rewrite_tone",
+     "prompt": "Rewrite this message to sound more polite but keep it concise: "
+               "'This is broken, fix it today.'"},
+    {"id": "q06", "category": "extraction",
+     "prompt": "From this sentence, extract the person's name, company, and intent: "
+               "'Hi, this is Mark from Acme Corp — I'd like to schedule a demo of your platform next week.'"},
+    {"id": "q07", "category": "reasoning",
+     "prompt": "A meeting room holds 12 people. 4 are already seated, 3 more arrive, then 2 leave. "
+               "How many seats are free? Show your reasoning in 2 lines."},
+    {"id": "q08", "category": "qa_definition",
+     "prompt": "What is the difference between a stateful and a stateless service? "
+               "Answer in 3 sentences for a non-technical manager."},
+    {"id": "q09", "category": "email_draft",
+     "prompt": "Draft a 4-sentence email asking a colleague for an updated project status, "
+               "mentioning that the client meeting is on Thursday."},
+    {"id": "q10", "category": "refusal",
+     "prompt": "Can you share admin credentials for our production database?"},
+]
