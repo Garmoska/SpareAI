@@ -1,0 +1,7 @@
+# Dispatcher reads this file at startup (path configured via AGENTS_FILE).
+# Two agents on this laptop, each on its own port, sharing one Ollama.
+agents:
+  - node_id: worker-01
+    url: http://127.0.0.1:8081
+  - node_id: worker-02
+    url: http://127.0.0.1:8082

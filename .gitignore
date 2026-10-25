@@ -1,4 +1,5 @@
 .env
+demo-env.local.ps1
 .venv/
 venv/
 __pycache__/
